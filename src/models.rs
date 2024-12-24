@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use std::collections::HashMap;
 
-/// A struct similar to your TaskExecutionLog in C#
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TaskExecutionLog {
     pub task_id: String,

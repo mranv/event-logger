@@ -1,19 +1,19 @@
 mod constants;
-mod models;
 mod registry_utils;
 mod eventlog_utils;
+mod models; // only if you're using the structured log approach
 
 use clap::{Parser, Subcommand};
-use rand::Rng;
-use serde_json::json;
-use std::collections::HashMap;
-use time::OffsetDateTime;
-
 use crate::constants::{COMPANY_NAME, IVS_AGENT_NAME};
-use crate::models::TaskExecutionLog;
 use crate::registry_utils::{source_exists, create_event_source, delete_event_source};
 use crate::eventlog_utils::{EventLogger, EVENT_TYPE_WARNING};
 
+use rand::Rng;
+
+/// A simple CLI for demonstration: 
+///   cargo run -- create-source
+///   cargo run -- write-entry
+///   cargo run -- delete-source
 #[derive(Parser)]
 #[command(author, version, about)]
 struct Cli {
@@ -26,26 +26,16 @@ enum Commands {
     CreateSource,
     WriteEntry,
     DeleteSource,
-    ReadEntries,
-    TestMySource,
-    ClearAll,
 }
 
 fn main() {
-    env_logger::init();
+    env_logger::init(); // if you want logs
     let cli = Cli::parse();
 
     match cli.command {
         Commands::CreateSource => create_source(),
-        Commands::WriteEntry => write_event_log(),
+        Commands::WriteEntry => write_entry(),
         Commands::DeleteSource => delete_source(),
-        Commands::ReadEntries => {
-            println!("ReadEntries not implemented in this sample.");
-        }
-        Commands::TestMySource => test_my_log_source(),
-        Commands::ClearAll => {
-            println!("ClearAll not implemented in this sample.");
-        }
     }
 
     println!("Application is closed");
@@ -53,98 +43,37 @@ fn main() {
 
 fn create_source() {
     if source_exists(COMPANY_NAME, IVS_AGENT_NAME) {
-        println!("Source '{}' already exists in '{}'", IVS_AGENT_NAME, COMPANY_NAME);
-        if let Some(logger) = EventLogger::register(IVS_AGENT_NAME, COMPANY_NAME) {
-            logger.write_entry("Test message - warning", EVENT_TYPE_WARNING);
-        }
+        println!("Source '{IVS_AGENT_NAME}' already exists in '{COMPANY_NAME}'");
     } else {
-        println!("Creating source '{}' under '{}'", IVS_AGENT_NAME, COMPANY_NAME);
+        println!("Creating source '{IVS_AGENT_NAME}' under '{COMPANY_NAME}'");
         match create_event_source(COMPANY_NAME, IVS_AGENT_NAME) {
             Ok(_) => println!("Source created successfully."),
-            Err(e) => eprintln!("Failed to create source: {:?}", e),
+            Err(e) => eprintln!("Error creating source: {e:?}"),
         }
     }
 }
 
-fn write_event_log() {
+fn write_entry() {
     let mut rng = rand::thread_rng();
-    let src_id = rng.gen_range(1..10);
-    let task_id = rng.gen_range(1..100);
+    let random_id = rng.gen_range(1..=999);
 
-    // We'll name the source "SRC-<src_id>"
-    let source_name = format!("SRC-{src_id}");
-    println!("Writing event with source={source_name}");
-
-    if let Some(logger) = EventLogger::register(&source_name, COMPANY_NAME) {
-        add_task_execution_log(
-            &logger,
-            &task_id.to_string(),
-            &task_id.to_string(),
-            "Success",
-            "Task executed successfully",
-            src_id,
-        );
+    // We want to write an event to "Infopercept" from "IvsAgent"
+    if let Some(logger) = EventLogger::register(IVS_AGENT_NAME, COMPANY_NAME) {
+        let message = format!("Hello from Rust! random_id={random_id}");
+        logger.write_entry(&message, EVENT_TYPE_WARNING);
+        println!("Wrote a 'WARNING' event: {message}");
     } else {
-        eprintln!("Could not register event source '{source_name}'");
+        eprintln!("Could not register source '{IVS_AGENT_NAME}' under '{COMPANY_NAME}'");
     }
 }
 
 fn delete_source() {
     if source_exists(COMPANY_NAME, IVS_AGENT_NAME) {
-        println!("Source '{}' exists under '{}'. Deleting...", IVS_AGENT_NAME, COMPANY_NAME);
+        println!("Deleting source '{IVS_AGENT_NAME}' from '{COMPANY_NAME}'");
         if let Err(e) = delete_event_source(COMPANY_NAME, IVS_AGENT_NAME) {
-            eprintln!("Failed to delete event source: {:?}", e);
+            eprintln!("Error deleting source: {e:?}");
         }
     } else {
-        println!("Source '{}' does NOT exist.", IVS_AGENT_NAME);
+        println!("Source '{IVS_AGENT_NAME}' does not exist in '{COMPANY_NAME}'");
     }
-}
-
-fn test_my_log_source() {
-    let my_source = "MySource";
-    let my_log = "MyNewLog";
-
-    if source_exists(my_log, my_source) {
-        println!("Source '{}' already exists in '{}'. Deleting...", my_source, my_log);
-        if let Err(e) = delete_event_source(my_log, my_source) {
-            eprintln!("Could not delete source: {:?}", e);
-        }
-        println!("MySource is deleted from MyNewLog");
-    } else {
-        println!("Source '{}' does NOT exist in '{}'. Creating...", my_source, my_log);
-        match create_event_source(my_log, my_source) {
-            Ok(_) => println!("Source created."),
-            Err(e) => eprintln!("Failed to create source: {:?}", e),
-        }
-    }
-}
-
-fn add_task_execution_log(
-    logger: &EventLogger,
-    task_id: &str,
-    command: &str,
-    status: &str,
-    message: &str,
-    src_id: i32,
-) {
-    let mut metadata = HashMap::new();
-    metadata.insert("srcId".to_string(), json!(src_id));
-
-    let exec_log = TaskExecutionLog {
-        task_id: task_id.to_string(),
-        command: command.to_string(),
-        status: status.to_string(),
-        message: message.to_string(),
-        metadata,
-        created_at: OffsetDateTime::now_utc(),
-    };
-
-    // Serialize to JSON
-    let json_data = match serde_json::to_string_pretty(&exec_log) {
-        Ok(s) => s,
-        Err(_) => "Failed to serialize TaskExecutionLog".to_string(),
-    };
-
-    // Write with a "warning" event type for demonstration
-    logger.write_entry(&json_data, EVENT_TYPE_WARNING);
 }

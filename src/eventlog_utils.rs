@@ -6,19 +6,17 @@ use windows::Win32::System::EventLog::{
     REPORT_EVENT_TYPE,
 };
 use windows::core::PCWSTR;
-use std::iter; // for encode_utf16
+use std::iter;
 
-/// If you ever need other event-type constants (Error=1, Info=4), just define and use them:
-/// pub const EVENT_TYPE_ERROR: u16 = 1;
-pub const EVENT_TYPE_WARNING: u16 = 2;
-/// pub const EVENT_TYPE_INFORMATION: u16 = 4;
+pub const EVENT_TYPE_WARNING: u16 = 2; // 1=ERROR, 2=WARNING, 4=INFORMATION
 
+/// Thin wrapper around a Windows `EventSourceHandle`
 pub struct EventLogger {
     source_handle: EventSourceHandle,
 }
 
 impl EventLogger {
-    /// Register a source under a given log, e.g. HKLM\SYSTEM\CurrentControlSet\Services\EventLog\<log>\<source>
+    /// Register "IvsAgent" under "Infopercept" (or any log/source you pass)
     pub fn register(source: &str, log: &str) -> Option<Self> {
         let registry_path = format!("SYSTEM\\CurrentControlSet\\Services\\EventLog\\{log}\\{source}");
         let wide_path: Vec<u16> = registry_path.encode_utf16().chain(iter::once(0)).collect();
@@ -29,30 +27,40 @@ impl EventLogger {
         }
     }
 
-    /// Write a single-string event to the Windows Event Log.
+    /// Write a single-string event
     ///
-    /// - `message`: the text to log
-    /// - `event_type`: typically 1=Error, 2=Warning, 4=Information (here default is 2=Warning)
+    /// `event_type` = 1=ERROR, 2=WARNING, 4=INFORMATION, etc.
     pub fn write_entry(&self, message: &str, event_type: u16) {
-        let wide_msg: Vec<u16> = message.encode_utf16().chain(iter::once(0)).collect();
+        // Convert message to wide
+        let wide_msg: Vec<u16> = message.encode_utf16().chain(std::iter::once(0)).collect();
         let pcwstr_msg = PCWSTR(wide_msg.as_ptr());
-        let string_slice = [pcwstr_msg];
 
+        let string_slice = [pcwstr_msg];
         let report_type = REPORT_EVENT_TYPE(event_type);
 
         unsafe {
-            // 8-parameter version of ReportEventW on your system:
-            // (heventlog, wtype, wcategory, dweventid, lpusersid, dwdatasize, lpstrings, lprawdata)
+            // 8-parameter version on your system:
+            //   ReportEventW(
+            //       heventlog,
+            //       wtype,
+            //       wcategory,
+            //       dweventid,
+            //       lpusersid,
+            //       dwdatasize,
+            //       lpstrings,
+            //       lprawdata
+            //   )
             let _ok = ReportEventW(
-                self.source_handle.clone(),
-                report_type,
-                0,    // category
-                0,    // event ID
-                None, // user SID
-                0,    // data size
-                Some(&string_slice),
-                None,
+                self.source_handle.clone(), // 1) event source
+                report_type,                // 2) event type (WARNING, etc.)
+                0,                          // 3) category
+                0,                          // 4) event ID
+                None,                       // 5) user SID (None)
+                0,                          // 6) dwDataSize
+                Some(&string_slice),        // 7) slice of strings
+                None,                       // 8) raw data
             );
+            // If `_ok == 0`, you could do GetLastError() to see what failed.
         }
     }
 }

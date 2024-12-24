@@ -12,11 +12,16 @@ windows = { version = "0.48", features = [
     "Win32_Security"
 ] }
 
+# For CLI subcommands (like `create-source`, `write-entry`)
 clap = { version = "4.5", features = ["derive"] }
+
+# For random numbers (just as a demo in `write-entry`)
 rand = "0.8"
+
+# For optional JSON logging structures
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 time = { version = "0.3", features = ["serde"] }
+
 log = "0.4"
 env_logger = "0.9"
-

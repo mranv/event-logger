@@ -7,13 +7,14 @@ use windows::core::{Error, HSTRING, HRESULT};
 use windows::core::PCWSTR;
 use std::iter;
 
+/// HKLM handle is 0x80000002
 const HKEY_LOCAL_MACHINE: HKEY = HKEY(0x80000002u64 as isize);
 
 fn build_source_registry_path(log_name: &str, source_name: &str) -> String {
     format!("SYSTEM\\CurrentControlSet\\Services\\EventLog\\{log_name}\\{source_name}")
 }
 
-/// Check if an event source key exists
+/// Check if the given event source subkey exists
 pub fn source_exists(log_name: &str, source_name: &str) -> bool {
     let path = build_source_registry_path(log_name, source_name);
     let wide_path: Vec<u16> = path.encode_utf16().chain(iter::once(0)).collect();
@@ -37,7 +38,7 @@ pub fn source_exists(log_name: &str, source_name: &str) -> bool {
     exists
 }
 
-/// Create the registry key for the event source
+/// Create the registry subkey for <log_name>\<source_name>, e.g. Infopercept\IvsAgent
 pub fn create_event_source(log_name: &str, source_name: &str) -> Result<(), Error> {
     let path = build_source_registry_path(log_name, source_name);
     let wide_path: Vec<u16> = path.encode_utf16().chain(iter::once(0)).collect();
@@ -65,7 +66,7 @@ pub fn create_event_source(log_name: &str, source_name: &str) -> Result<(), Erro
     }
 }
 
-/// Delete the registry key for the event source
+/// Delete the registry subkey for <log_name>\<source_name>
 pub fn delete_event_source(log_name: &str, source_name: &str) -> Result<(), Error> {
     let path = build_source_registry_path(log_name, source_name);
     let wide_path: Vec<u16> = path.encode_utf16().chain(iter::once(0)).collect();
@@ -81,10 +82,9 @@ pub fn delete_event_source(log_name: &str, source_name: &str) -> Result<(), Erro
     }
 }
 
-/// Convert a WIN32_ERROR to a windows::core::Error
+/// Helper to convert a Win32 error code to a `windows::core::Error`
 fn win32_error(context: &str, code: WIN32_ERROR) -> Error {
-    // Convert a Win32 error to an HRESULT (FACILITY_WIN32 = 7).
-    // 0x8007_0000 is an i32 bitmask. We must cast to i32.
+    // Combine code with 0x80070000 to build an HRESULT for FACILITY_WIN32
     let mask = 0x80070000u32 | (code.0 & 0xFFFF);
     let hr = HRESULT(mask as i32);
     Error::new(hr, HSTRING::from(format!("{context} failed with code: {}", code.0)))
